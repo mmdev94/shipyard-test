@@ -93,31 +93,55 @@ jobs:
       - name: Plan and build the image
         working-directory: ${{ env.APP_DIR }}
         run: |
-          set -euo pipefail
-          if ! mscomputer plan --write --json > "$RUNNER_TEMP/plan.json"; then
-            cat "$RUNNER_TEMP/plan.json"
-            echo "::error::ms.computer couldn't plan this app — the reason is in the JSON above."
-            exit 1
-          fi
-          mscomputer build --static
+          set +e -uo pipefail
+          annotate() {
+            local msg
+            msg=$(tail -n 25 "$3" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=$1 (exit $2)::$msg"
+          }
+          # run TITLE CMD...  — TITLE "-" means: don't annotate, the caller decides.
+          run() {
+            local title="$1"; shift
+            "$@" > "$RUNNER_TEMP/last.log" 2>&1
+            local rc=$?
+            cat "$RUNNER_TEMP/last.log"
+            if [ "$rc" -ne 0 ] && [ "$title" != "-" ]; then annotate "$title" "$rc" "$RUNNER_TEMP/last.log"; fi
+            return "$rc"
+          }
+          run "ms.computer couldn't plan this app" mscomputer plan --write --json || exit 1
+          run "The image build failed" mscomputer build --static || exit 1
 
       - name: Deploy
         id: deploy
         working-directory: ${{ env.APP_DIR }}
         run: |
-          set -uo pipefail
-          LOG="$RUNNER_TEMP/deploy.log"
-          deploy() { mscomputer deploy --name "$APP_NAME" 2>&1 | tee "$LOG"; return ${PIPESTATUS[0]}; }
-          if ! deploy; then
-            if grep -q APPLICATION_ALREADY_LIVE "$LOG"; then
+          set +e -uo pipefail
+          annotate() {
+            local msg
+            msg=$(tail -n 25 "$3" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+            echo "::error title=$1 (exit $2)::$msg"
+          }
+          # run TITLE CMD...  — TITLE "-" means: don't annotate, the caller decides.
+          run() {
+            local title="$1"; shift
+            "$@" > "$RUNNER_TEMP/last.log" 2>&1
+            local rc=$?
+            cat "$RUNNER_TEMP/last.log"
+            if [ "$rc" -ne 0 ] && [ "$title" != "-" ]; then annotate "$title" "$rc" "$RUNNER_TEMP/last.log"; fi
+            return "$rc"
+          }
+          run - mscomputer deploy --name "$APP_NAME"; RC=$?
+          if [ "$RC" -ne 0 ]; then
+            if grep -q APPLICATION_ALREADY_LIVE "$RUNNER_TEMP/last.log"; then
               echo "Static sites can't be swapped in place — taking the old version down and shipping the new one."
-              mscomputer teardown
-              deploy || exit 1
+              run "Taking the old version down failed" mscomputer teardown || exit 1
+              run "Deploy failed after teardown" mscomputer deploy --name "$APP_NAME" || exit 1
             else
+              annotate "Deploy failed" "$RC" "$RUNNER_TEMP/last.log"
               exit 1
             fi
           fi
-          URL=$(grep -oE 'https://[a-z0-9-]+\.ms\.computer' "$LOG" | tail -1)
+          URL=$(grep -oE 'https://[a-z0-9-]+\.ms\.computer' "$RUNNER_TEMP/last.log" | tail -1 || true)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "::notice title=Live on ms.computer::$URL"
           printf '### Live on ms.computer\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
