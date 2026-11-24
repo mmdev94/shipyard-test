@@ -134,7 +134,13 @@ jobs:
           if [ "$RC" -ne 0 ]; then
             if grep -q APPLICATION_ALREADY_LIVE "$RUNNER_TEMP/last.log"; then
               echo "Static sites can't be swapped in place — taking the old version down and shipping the new one."
-              run "Taking the old version down failed" mscomputer teardown || exit 1
+              echo "::notice title=Updating a live site::$(tail -n 12 "$RUNNER_TEMP/last.log" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')"
+              DEP=$(grep -oE 'dep_[0-9a-f]{8,}' "$RUNNER_TEMP/last.log" | head -1 || true)
+              if [ -z "$DEP" ]; then
+                annotate "Couldn't tell which live deployment to replace" 2 "$RUNNER_TEMP/last.log"
+                exit 1
+              fi
+              run "Taking the old version down failed" mscomputer teardown "$DEP" || exit 1
               run "Deploy failed after teardown" mscomputer deploy --name "$APP_NAME" || exit 1
             else
               annotate "Deploy failed" "$RC" "$RUNNER_TEMP/last.log"
