@@ -6,9 +6,14 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      replace_deployment:
+        description: Only if a failed run asks for it — the dep_… id of the live deployment to replace
+        required: false
 
 permissions:
   contents: read
+  deployments: write
 
 concurrency:
   group: ms-computer-deploy
@@ -34,6 +39,8 @@ jobs:
 
       - name: Check out
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -114,6 +121,9 @@ jobs:
       - name: Deploy
         id: deploy
         working-directory: ${{ env.APP_DIR }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPLACE_DEPLOYMENT: ${{ inputs.replace_deployment }}
         run: |
           set +e -uo pipefail
           annotate() {
@@ -134,12 +144,15 @@ jobs:
           if [ "$RC" -ne 0 ]; then
             if grep -q APPLICATION_ALREADY_LIVE "$RUNNER_TEMP/last.log"; then
               echo "Static sites can't be swapped in place — taking the old version down and shipping the new one."
-              echo "::notice title=Updating a live site::$(tail -n 12 "$RUNNER_TEMP/last.log" | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}')"
-              DEP=$(grep -oE 'dep_[0-9a-f]{8,}' "$RUNNER_TEMP/last.log" | head -1 || true)
+              DEP="$REPLACE_DEPLOYMENT"
               if [ -z "$DEP" ]; then
-                annotate "Couldn't tell which live deployment to replace" 2 "$RUNNER_TEMP/last.log"
+                DEP=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=ms-computer&per_page=20"                   --jq '[.[] | .payload.ms_computer_deployment? // empty] | first // empty' || true)
+              fi
+              if ! [[ "$DEP" =~ ^dep_[0-9a-f]+$ ]]; then
+                echo "::error title=Can't tell which live version to replace::This app is already live, but no earlier deploy from this workflow is on record. Open the log of the run that first deployed it, copy the id on its 'Deployment: dep_…' line, then run this workflow from the Actions tab and paste that id. After that, pushes update the site by themselves."
                 exit 1
               fi
+              echo "Replacing live deployment $DEP"
               run "Taking the old version down failed" mscomputer teardown "$DEP" || exit 1
               run "Deploy failed after teardown" mscomputer deploy --name "$APP_NAME" || exit 1
             else
@@ -148,9 +161,26 @@ jobs:
             fi
           fi
           URL=$(grep -oE 'https://[a-z0-9-]+\.ms\.computer' "$RUNNER_TEMP/last.log" | tail -1 || true)
+          DEP_ID=$(jq -r '.deployment.id // empty' .mscomputer/state/deploy.json 2>/dev/null || true)
+          [ -n "$DEP_ID" ] || DEP_ID=$(grep -oE 'dep_[0-9a-f]{8,}' "$RUNNER_TEMP/last.log" | tail -1 || true)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "deployment_id=$DEP_ID" >> "$GITHUB_OUTPUT"
           echo "::notice title=Live on ms.computer::$URL"
           printf '### Live on ms.computer\n%s\n' "$URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the deployment on GitHub
+        if: ${{ steps.deploy.outputs.deployment_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEP_ID: ${{ steps.deploy.outputs.deployment_id }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          ID=$(jq -n --arg sha "$GITHUB_SHA" --arg dep "$DEP_ID"             '{ref: $sha, environment: "ms-computer", auto_merge: false, required_contexts: [],
+              production_environment: true, description: "Deployed by Shipyard",
+              payload: {ms_computer_deployment: $dep}}'             | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$ID/statuses" -f state=success             -f environment_url="$URL" -f log_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > /dev/null
+          echo "Recorded $DEP_ID — the next push replaces it."
 
       - name: Save the app identity (first deploy only)
         if: ${{ vars.MSCOMPUTER_TOML == '' }}
