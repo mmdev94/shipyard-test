@@ -1,8 +1,0 @@
-:{$PORT:80} {
-	root * .
-	header X-Probe-Caddy yes
-	@spa path /caddyspa/*
-	rewrite @spa /index.html
-	redir /caddyold /about/ 301
-	file_server
-}
