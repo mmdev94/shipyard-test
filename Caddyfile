@@ -1,0 +1,24 @@
+# Serves the site on ms.computer with the rules it had on Netlify.
+# Written by Shipyard from netlify.toml — edit freely.
+:{$PORT:80} {
+	root * .
+	encode gzip
+	@hidden path /_redirects /_headers /Caddyfile /netlify.toml /vercel.json
+	respond @hidden 404
+	@h1 path_regexp h1 ^/(.*)$
+	header @h1 X-Frame-Options "DENY"
+	header @h1 X-Moved-From "netlify"
+	@r2 {
+		path_regexp r2 ^/old-about$
+		not file
+	}
+	redir @r2 /about 301
+	@r3 path_regexp r3 ^/blog/(.*)$
+	redir @r3 /posts/{re.r3.1} 301
+	try_files {path} {path}.html {path}/index.html /index.html
+	file_server
+	handle_errors 404 {
+		rewrite * /404.html
+		file_server
+	}
+}
