@@ -88,7 +88,7 @@ jobs:
           APP_DIR="$RUNNER_TEMP/site"
           rm -rf "$APP_DIR" && mkdir -p "$APP_DIR"
           rsync -a --exclude .git --exclude .github --exclude node_modules \
-            --exclude '.env*' --exclude Procfile --exclude Caddyfile \
+            --exclude '.env*' --exclude Procfile \
             "dist/" "$APP_DIR/"
           if [ ! -f "$APP_DIR/index.html" ]; then
             echo "::error::'dist' has no index.html after the build. Check OUTPUT_DIR in Shipyard."
@@ -375,7 +375,7 @@ jobs:
           APP_DIR="$RUNNER_TEMP/site"
           rm -rf "$APP_DIR" && mkdir -p "$APP_DIR"
           rsync -a --exclude .git --exclude .github --exclude node_modules \
-            --exclude '.env*' --exclude Procfile --exclude Caddyfile \
+            --exclude '.env*' --exclude Procfile \
             "dist/" "$APP_DIR/"
           if [ ! -f "$APP_DIR/index.html" ]; then
             echo "::error::'dist' has no index.html after the build. Check OUTPUT_DIR in Shipyard."
