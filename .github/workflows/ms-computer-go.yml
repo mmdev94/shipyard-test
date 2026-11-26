@@ -79,6 +79,7 @@ jobs:
             echo "::error::'.' has no index.html after the build. Check OUTPUT_DIR in Shipyard."
             exit 1
           fi
+          rm -f "$APP_DIR/_redirects" "$APP_DIR/_headers" "$APP_DIR/netlify.toml" "$APP_DIR/vercel.json"
           # served by Caddy with the repo's rules (a dynamic app — see the caddyfile setting)
           cp "Caddyfile" "$APP_DIR/Caddyfile"
           cd "$APP_DIR"
