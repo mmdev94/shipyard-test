@@ -1,5 +1,4 @@
----
-title: "Hello from Hugo"
-date: 2026-11-27
----
++++
+title = "Hello from Zola"
++++
 It works.

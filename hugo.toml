@@ -1,4 +1,0 @@
-baseURL = "https://me.github.io/blog/"
-languageCode = "en-us"
-title = "Shipyard Hugo test"
-theme = "ananke"
