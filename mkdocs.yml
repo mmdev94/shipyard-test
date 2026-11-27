@@ -1,7 +1,0 @@
-site_name: Shipyard MkDocs test
-site_url: https://me.github.io/docs/
-theme:
-  name: material
-nav:
-  - Home: index.md
-  - Guide: guide.md
