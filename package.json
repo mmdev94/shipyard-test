@@ -1,1 +1,1 @@
-{ "name": "shipyard-test", "private": true, "version": "1.0.0", "scripts": { "build": "node build.mjs" } }
+{"name":"shipyard-test","private":true,"version":"1.0.0","scripts":{"build":"node build.mjs"},"devDependencies":{"shipyard-path-probe":"file:tools/path-probe"}}
