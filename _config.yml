@@ -1,0 +1,4 @@
+title: Shipyard Jekyll test
+description: A GitHub Pages-style Jekyll site (no Gemfile), built by a Shipyard workflow
+baseurl: "/blog"
+theme: minima
